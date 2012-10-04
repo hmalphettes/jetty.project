@@ -16,7 +16,7 @@
 //  ========================================================================
 //
 
-package org.eclipse.jetty.osgi.boot;
+package org.eclipse.jetty.osgi.test;
 
 import static org.ops4j.pax.exam.CoreOptions.mavenBundle;
 import static org.ops4j.pax.exam.CoreOptions.options;
@@ -35,16 +35,17 @@ import junit.framework.Assert;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.HttpContentResponse;
 import org.eclipse.jetty.client.api.Response;
+import org.eclipse.jetty.osgi.boot.OSGiServerConstants;
 import org.eclipse.jetty.http.HttpStatus;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.ops4j.pax.exam.CoreOptions;
-import org.ops4j.pax.exam.Inject;
+import javax.inject.Inject;
 import org.ops4j.pax.exam.Option;
-import org.ops4j.pax.exam.container.def.PaxRunnerOptions;
 import org.ops4j.pax.exam.junit.Configuration;
+import org.ops4j.pax.exam.junit.ExamReactorStrategy;
 import org.ops4j.pax.exam.junit.JUnit4TestRunner;
+import org.ops4j.pax.exam.spi.reactors.AllConfinedStagedReactorFactory;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 
@@ -53,6 +54,7 @@ import org.osgi.framework.BundleContext;
  * Then make sure we can deploy an OSGi service on the top of this.
  */
 @RunWith( JUnit4TestRunner.class )
+@ExamReactorStrategy( AllConfinedStagedReactorFactory.class )
 public class TestJettyOSGiBootWithJsp
 {
     private static final boolean LOGGING_ENABLED = true;
@@ -68,10 +70,12 @@ public class TestJettyOSGiBootWithJsp
     	String etc = "file://" + etcFolder.getAbsolutePath();
 
     	ArrayList<Option> options = new ArrayList<Option>();
-    	options.add(PaxRunnerOptions.vmOption("-Djetty.port=9876 -Djetty.home="+ etcFolder.getParentFile().getAbsolutePath() +
-    			" -D" + OSGiServerConstants.MANAGED_JETTY_XML_CONFIG_URLS +
-                "="+etc+"/jetty.xml;"+etc+"/jetty-selector.xml;"+etc+"/jetty-deployer.xml;" + etc + "/jetty-testrealm.xml"));
-    	options.add(CoreOptions.equinox());
+        options.add(CoreOptions.junitBundles());
+    	options.add(systemProperty("jetty.port").value("9876"));
+    	options.add(systemProperty("jetty.home").value(etcFolder.getParentFile().getAbsolutePath()));
+    	options.add(systemProperty(OSGiServerConstants.MANAGED_JETTY_XML_CONFIG_URLS)
+    			.value(etc+"/jetty.xml;"+etc+"/jetty-selector.xml;"+etc+"/jetty-deployer.xml;" + etc + "/jetty-testrealm.xml"));
+    	//options.add(CoreOptions.equinox());
     	options.add(CoreOptions.bootDelegationPackages("org.xml.sax", "org.xml.*",
     			"org.w3c.*", "javax.xml.*"));
     	options.addAll(TestJettyOSGiBootCore.coreJettyDependencies());
@@ -88,14 +92,18 @@ public class TestJettyOSGiBootWithJsp
     	
         options.addAll(jspDependencies());
 
-    	// Remote JDWP Debugging
-    	if(REMOTE_DEBUGGING) {
-    	    options.addAll(Arrays.asList(options(
-    	        // this just adds all what you write here to java vm argumenents of the (new) osgi process.
-    	        PaxRunnerOptions.vmOption( "-Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=5006" )
-    	    )));
-    	}
+    	// Remote JDWP Debugging, this won't work with the forked container.
+//    	if(REMOTE_DEBUGGING) {
+//    	    options.addAll(Arrays.asList(options(
+//    	        // this just adds all what you write here to java vm argumenents of the (new) osgi process.
+//    	        PaxRunnerOptions.vmOption( "-Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=5006" )
+//    	    )));
+//    	}
 
+        //bug at the moment: this would make the httpservice catch all
+        //requests and prevent the webapp at the root context to catch any of them.
+        //options.addAll(TestJettyOSGiBootCore.httpServiceJetty());
+        
     	return options.toArray(new Option[options.size()]);
     }
     
@@ -112,11 +120,9 @@ public class TestJettyOSGiBootWithJsp
 
 	    /* jetty-osgi deps */
         res.add(mavenBundle().groupId( "org.eclipse.jetty.osgi" ).artifactId( "jetty-osgi-boot-jsp" ).versionAsInProject().noStart());
-        res.add(mavenBundle().groupId( "org.eclipse.jetty.osgi" ).artifactId( "jetty-osgi-boot" ).versionAsInProject().start());
 
         res.add(mavenBundle().groupId( "org.eclipse.jetty" ).artifactId( "test-jetty-webapp" ).classifier("webbundle").versionAsInProject());
 
-        res.add(mavenBundle().groupId( "org.eclipse.equinox.http" ).artifactId( "servlet" ).versionAsInProject().start());
         return res;
     }
 
@@ -128,9 +134,13 @@ public class TestJettyOSGiBootWithJsp
     public void listBundles() throws Exception
     {
     	Map<String,Bundle> bundlesIndexedBySymbolicName = new HashMap<String, Bundle>();
+//    	System.err.println("Bundle.Active->"+Bundle.ACTIVE);
+//    	System.err.println("Bundle.Installed->"+Bundle.INSTALLED);
+//    	System.err.println("Bundle.Resolved->"+Bundle.RESOLVED);
         for( Bundle b : bundleContext.getBundles() )
         {
         	bundlesIndexedBySymbolicName.put(b.getSymbolicName(), b);
+//        	System.err.println("      " + b.getSymbolicName() + " " + b.getState());
         }
         Bundle websocketServer = bundlesIndexedBySymbolicName.get("org.eclipse.jetty.websocket.server");
         Assert.assertNotNull("Could not find the org.eclipse.jetty.websocket.server bundle", websocketServer);
@@ -148,7 +158,8 @@ public class TestJettyOSGiBootWithJsp
         Bundle testWebBundle = bundlesIndexedBySymbolicName.get("org.eclipse.jetty.test-jetty-webapp");
         Assert.assertNotNull("Could not find the org.eclipse.jetty.test-jetty-webappp bundle", osgiBootJsp);
         Assert.assertEquals("The test-jetty-webapp is not correctly resolved", Bundle.ACTIVE, testWebBundle.getState());
-
+//System.err.println("http://127.0.0.1:9876/jsp/dump.jsp  sleeping....");
+//Thread.currentThread().sleep(5000000);
         //now test the jsp/dump.jsp
         HttpClient client = new HttpClient();
         try
