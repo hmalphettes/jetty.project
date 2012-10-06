@@ -19,6 +19,8 @@
     <!--felixversion>3.2.2</felixversion-->
     <felixversion>4.0.3</felixversion>
     <injection.bundle.version>1.0</injection.bundle.version>
+    <runner.version>1.7.6</runner.version>
+    <npn-version>1.1.0.v20120525</npn-version>
   </properties>
   <dependencies>
     <dependency>
@@ -70,24 +72,43 @@
       <version>${exam.version}</version>
       <scope>test</scope>
     </dependency>
-    <!-- Only use the native container when:
-    - you run a single test with a single configuration
-    - you don't read the versions of the dependencies from the pom.xml
-    - you like to hardcode the bundles versions in your source code instead
-    - you don't care for most configuration options for the OSGi container.
-    NEVER use the native container until much further notice -->
+
+    <!-- Don't use the native container for now. Observed limitations:
+    - single test with a single configuration
+    - does not read the versions of the dependencies from the pom.xml
+    and hence hardcode the bundles versions in the source code instead
+    - no support for most configuration options for the OSGi container. -->
     <!--dependency>
       <groupId>org.ops4j.pax.exam</groupId>
       <artifactId>pax-exam-container-native</artifactId>
       <version>${exam.version}</version>
       <scope>test</scope>
     </dependency-->
+
+    <!-- container is not bad but not enough config parameters yet
+    can't pass the VMOption for npn-boot
     <dependency>
         <groupId>org.ops4j.pax.exam</groupId>
         <artifactId>pax-exam-container-forked</artifactId>
         <version>${exam.version}</version>
         <scope>test</scope>
     </dependency>
+    -->
+
+    <dependency>
+        <groupId>org.ops4j.pax.exam</groupId>
+        <artifactId>pax-exam-container-paxrunner</artifactId>
+        <version>${exam.version}</version>
+        <scope>test</scope>
+    </dependency>
+     
+    <dependency>
+        <groupId>org.ops4j.pax.runner</groupId>
+        <artifactId>pax-runner-no-jcl</artifactId>
+        <version>${runner.version}</version>
+        <scope>test</scope>
+    </dependency>
+
     <dependency>
       <groupId>org.ops4j.pax.exam</groupId>
       <artifactId>pax-exam-junit4</artifactId>
@@ -231,6 +252,38 @@
       <version>${project.version}</version>
       <scope>runtime</scope>
     </dependency>
+    
+    <dependency>
+      <groupId>org.eclipse.jetty.spdy</groupId>
+      <artifactId>spdy-core</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty.spdy</groupId>
+      <artifactId>spdy-server</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty.spdy</groupId>
+      <artifactId>spdy-http-server</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty.spdy</groupId>
+      <artifactId>spdy-client</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mortbay.jetty.npn</groupId>
+      <artifactId>npn-boot</artifactId>
+      <version>${npn-version}</version>
+      <scope>test</scope>
+    </dependency>
+    
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-plus</artifactId>
@@ -270,6 +323,15 @@
   </dependencies>
   <build>
     <plugins>
+      <plugin>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- No point defining -Xbootclasspath as the actual OSGi VM is run as a forked process by pax-exam -->
+          <!--argLine>-Xbootclasspath/p:${settings.localRepository}/org/mortbay/jetty/npn/npn-boot/${npn-version}/npn-boot-${npn-version}.jar</argLine-->
+          <!-- But we do pass the sys property of the npn-boot jar -->
+          <argLine>-Dmortbay-npn-boot=${settings.localRepository}/org/mortbay/jetty/npn/npn-boot/${npn-version}/npn-boot-${npn-version}.jar</argLine>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
