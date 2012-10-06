@@ -35,15 +35,18 @@ import junit.framework.Assert;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.HttpContentResponse;
 import org.eclipse.jetty.client.api.Response;
-import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.osgi.boot.OSGiServerConstants;
+import org.eclipse.jetty.http.HttpStatus;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.ops4j.pax.exam.CoreOptions;
+import org.ops4j.pax.exam.Inject;
 import org.ops4j.pax.exam.Option;
 import org.ops4j.pax.exam.junit.Configuration;
+import org.ops4j.pax.exam.junit.ExamReactorStrategy;
 import org.ops4j.pax.exam.junit.JUnit4TestRunner;
+import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 
 /**
@@ -51,8 +54,7 @@ import org.osgi.framework.BundleContext;
  * Then make sure we can deploy an OSGi service on the top of this.
  */
 @RunWith( JUnit4TestRunner.class )
-//@ExamReactorStrategy( AllConfinedStagedReactorFactory.class )
-public class TestJettyOSGiBootWithJsp extends AbstractTestOSGi
+public class TestJettyOSGiBootWithJsp
 {
     private static final boolean LOGGING_ENABLED = true;
     private static final boolean REMOTE_DEBUGGING = false;
@@ -65,11 +67,10 @@ public class TestJettyOSGiBootWithJsp extends AbstractTestOSGi
     {
 
     	ArrayList<Option> options = new ArrayList<Option>();
-    	
-        addMoreOSGiContainers(options);
-    	
-        options.add(CoreOptions.junitBundles());
-        options.addAll(configureJettyHomeAndPort("jetty-selector.xml"));
+    	options.add(PaxRunnerOptions.vmOption("-Djetty.port=9876 -Djetty.home="+ etcFolder.getParentFile().getAbsolutePath() +
+    			" -D" + OSGiServerConstants.MANAGED_JETTY_XML_CONFIG_URLS +
+                "="+etc+"/jetty.xml;"+etc+"/jetty-selector.xml;"+etc+"/jetty-deployer.xml;" + etc + "/jetty-testrealm.xml"));
+    	options.add(CoreOptions.equinox());
     	options.add(CoreOptions.bootDelegationPackages("org.xml.sax", "org.xml.*",
     			"org.w3c.*", "javax.xml.*"));
     	options.addAll(TestJettyOSGiBootCore.coreJettyDependencies());
@@ -138,24 +139,28 @@ public class TestJettyOSGiBootWithJsp extends AbstractTestOSGi
     @Test
     public void assertAllBundlesActiveOrResolved()
     {
-    	assertAllBundlesActiveOrResolved(bundleContext);
-    }
+    	Map<String,Bundle> bundlesIndexedBySymbolicName = new HashMap<String, Bundle>();
+        for( Bundle b : bundleContext.getBundles() )
+        {
+        	bundlesIndexedBySymbolicName.put(b.getSymbolicName(), b);
+        }
+        Bundle websocketServer = bundlesIndexedBySymbolicName.get("org.eclipse.jetty.websocket.server");
+        Assert.assertNotNull("Could not find the org.eclipse.jetty.websocket.server bundle", websocketServer);
+        Assert.assertEquals(Bundle.RESOLVED, websocketServer.getState());
 
-    //at the moment can't run httpservice with jsp at the same time.
-    //that is a regression in jetty-9
-    @Ignore
-    @Test
-    public void testHttpService() throws Exception
-    {
-    	super.testHttpServiceGreetings(bundleContext, "http", TestJettyOSGiBootCore.DEFAULT_JETTY_HTTP_PORT);
-    }
-        
-    @Test
-    public void testJspDump() throws Exception
-    {
+        Bundle osgiBoot = bundlesIndexedBySymbolicName.get("org.eclipse.jetty.osgi.boot");
+        Assert.assertNotNull("Could not find the org.eclipse.jetty.osgi.boot bundle", osgiBoot);
+        Assert.assertEquals(Bundle.ACTIVE, osgiBoot.getState());
 
-//System.err.println("http://127.0.0.1:9876/jsp/dump.jsp  sleeping....");
-//Thread.currentThread().sleep(5000000);
+        Bundle osgiBootJsp = bundlesIndexedBySymbolicName.get("org.eclipse.jetty.osgi.boot.jsp");
+        Assert.assertNotNull("Could not find the org.eclipse.jetty.osgi.boot.jsp bundle", osgiBootJsp);
+        Assert.assertEquals("The fragment jsp is not correctly resolved.",
+        		Bundle.RESOLVED, osgiBootJsp.getState());
+
+        Bundle testWebBundle = bundlesIndexedBySymbolicName.get("org.eclipse.jetty.test-jetty-webapp");
+        Assert.assertNotNull("Could not find the org.eclipse.jetty.test-jetty-webappp bundle", osgiBootJsp);
+        Assert.assertEquals("The test-jetty-webapp is not correctly resolved", Bundle.ACTIVE, testWebBundle.getState());
+
         //now test the jsp/dump.jsp
         HttpClient client = new HttpClient();
         try
